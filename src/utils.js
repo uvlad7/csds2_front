@@ -1,7 +1,7 @@
 export const api = {
   login: 'login',
   signUp: 'signup',
-  getData: 'text_files',
+  getData: 'files',
   private: {
     rsaGenerate: 'private/rsa/generate',
     rsaDecrypt: 'private/rsa/decrypt',
@@ -11,7 +11,8 @@ export const api = {
 
 const host = 'http://localhost:4000'
 
-export const request = async (url, method, data, token=null) => {
+export const request = async (url, method, data, token = null) => {
+  console.log('request')
   const response = await fetch(`${host}/${url}`, {
     method,
     headers: {
@@ -23,6 +24,34 @@ export const request = async (url, method, data, token=null) => {
   });
   const { status } = response;
   const json = await response.json();
+  console.log(json)
+  if (status !== 200) {
+    const { error } = json;
+    throw { status, error };
+  }
+  return { data: json.data, headers: response.headers };
+};
+
+export const getRequest = async (url, data, token = null) => {
+  console.log('request')
+  //   var url = new URL('https://sl.se')
+
+  // var params = {lat:35.696233, long:139.570431} // or:
+  // var params = [['lat', '35.696233'], ['long', '139.570431']]
+
+  // url.search = new URLSearchParams(params).toString();
+  const response = await fetch(`${host}/${url}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': token
+    }
+  });
+  const { status } = response;
+
+  const json = await response.json();
+  console.log(response)
   if (status !== 200) {
     const { error } = json;
     throw { status, error };
@@ -33,11 +62,11 @@ export const request = async (url, method, data, token=null) => {
 export const str2ab = (str) => {
   var buff = new ArrayBuffer(str.length * 2);
   var view = new Uint16Array(buff);
-  for ( var i=0, l=str.length; i<l; i++) {
-   view[i] = str.charCodeAt(i);
+  for (var i = 0, l = str.length; i < l; i++) {
+    view[i] = str.charCodeAt(i);
   }
   return buff;
- }
+}
 
 export const randomInteger = (min, max) => {
   let rand = min + Math.random() * (max + 1 - min);

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import logo from './logo.svg';
-import { Crypt, RSA } from 'hybrid-crypto-js';
-
+import NodeRSA from 'node-rsa'
 import './App.css';
 import DataView from './components/DataView'
 import LoginForm from './components/LoginForm'
-import { request, api, str2ab } from './utils';
+import Files from './components/Files'
+import crypto from 'crypto'
+
+import { request, api, str2ab, getRequest } from './utils';
 
 function App() {
   const [publicKey, setPublicKey] = useState()
@@ -17,6 +19,37 @@ function App() {
   const [text, setText] = useState(null)
   const [token, setToken] = useState(null)
   const [error, setError] = useState(null)
+  const [key, setKey] = useState(null)
+  const [files, setFiles] = useState(null)
+
+  const algorithm = 'aes-256-cfb';
+
+  const encryptText = (keyStr, text) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(keyStr);
+    const keyBytes = hash.digest();
+  
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(algorithm, keyBytes, iv);
+    console.log('IV:', iv);
+    let enc = [iv, cipher.update(text, 'utf8')];
+    enc.push(cipher.final());
+    return Buffer.concat(enc).toString('base64');
+  }
+
+  const decryptText = (keyStr, text) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(keyStr);
+    const keyBytes = hash.digest();
+  
+    const contents = Buffer.from(text, 'base64');
+    const iv = contents.slice(0, 16);
+    const textBytes = contents.slice(16);
+    const decipher = crypto.createDecipheriv(algorithm, keyBytes, iv);
+    let res = decipher.update(textBytes, '', 'utf8');
+    res += decipher.final('utf8');
+    return res;
+  } 
 
   const handleError = ({ status, error }) => {
     if (status === 401) {
@@ -37,40 +70,46 @@ function App() {
 
   const generateKeys = async () => {
     try {
-      crypto.subtle.generateKey(
-        {
-          name: "RSA-OAEP",
-          modulusLength: 2048, //can be 1024, 2048, or 4096
-          publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
-          hash: { name: "SHA-256" }, //can be "SHA-1", "SHA-256", "SHA-384", or "SHA-512"
-        },
-        true, //whether the key is extractable (i.e. can be used in exportKey)
-        ["encrypt", "decrypt"] //can be any combination of "sign" and "verify"
-      )
-        .then(function (key) {
-          //returns a keypair object
-          setPrivateKey(key.privateKey)
-          crypto.subtle.exportKey(
-            "spki", //can be "jwk" (public or private), "spki" (public only), or "pkcs8" (private only)
-            key.publicKey //can be a publicKey or privateKey, as long as extractable was true
-          ).catch(function (err) {
-            console.error(err);
-          }).then(function (keydata) {
-            //returns the exported key data
-            console.log("Public key: " + buf2hex(keydata));
-            let publicKeyBase64 = window.btoa(String.fromCharCode.apply(null, new Uint8Array(keydata)));
-            publicKeyBase64 = publicKeyBase64.match(/.{1,64}/g).join('\n');
-            publicKeyBase64 = `-----BEGIN PUBLIC KEY-----\n${publicKeyBase64}\n-----END PUBLIC KEY-----`;
-            console.log("Public key (base64): " + publicKeyBase64);
-            setPublicKey(publicKeyBase64);
-          })
-            .catch(function (err) {
-              console.error(err);
-            });
-        })
-        .catch(function (err) {
-          console.error(err);
-        });
+      const key = new NodeRSA().generateKeyPair()
+      key.setOptions({ encryptionScheme: 'pkcs1' })
+      setKey(key)
+      const publicKey = key.exportKey('pkcs8-public-pem');
+      console.log(publicKey)
+      const privateKey = key.exportKey('pkcs1-pem');
+      console.log(privateKey)
+      setPublicKey(publicKey);
+      setPrivateKey(privateKey);
+      // console.log(publicKey)
+
+      // crypto.subtle.generateKey(
+      //   {
+      //     name: "RSA-OAEP",
+      //     modulusLength: 2048, //can be 1024, 2048, or 4096
+      //     publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+      //     hash: { name: "SHA-256" }, //can be "SHA-1", "SHA-256", "SHA-384", or "SHA-512"
+      //   },
+      //   true, //whether the key is extractable (i.e. can be used in exportKey)
+      //   ["encrypt", "decrypt"] //can be any combination of "sign" and "verify"
+      // )
+      //   .then(function (key) {
+      //     //returns a keypair object
+      //     setPrivateKey(key.privateKey)
+      //     crypto.subtle.exportKey(
+      //       "jwk", //can be "jwk" (public or private), "spki" (public only), or "pkcs8" (private only)
+      //       key.publicKey //can be a publicKey or privateKey, as long as extractable was true
+      //     ).catch(function (err) {
+      //       console.error(err);
+      //     }).then(function (keydata) {
+      //       //returns the exported key data
+      //       setPublicKey(keydata);
+      //     })
+      //       .catch(function (err) {
+      //         console.error(err);
+      //       });
+      //   })
+      //   .catch(function (err) {
+      //     console.error(err);
+      //   });
       setText(null)
       setSessionKey(null)
       // setPublicKey({ e, n })
@@ -83,16 +122,8 @@ function App() {
   };
 
   const decrypt = async (encrypted) => {
-    console.log(encrypted)
-    console.log(privateKey)
-    const decrypted = await crypto.subtle.decrypt(
-      {
-        name: "RSA-OAEP"
-      },
-      privateKey,
-      new TextEncoder().encode(atob(encrypted))
-    )
-    console.log(new Uint8Array(decrypted))
+    key.setOptions({ encryptionScheme: 'pkcs1' })
+    setSessionKey(key.decrypt(encrypted, 'utf-8'))
   }
 
   const login = async () => {
@@ -144,16 +175,14 @@ function App() {
   };
 
   const getData = async () => {
-    try {
-      const { files } = await request(api.getData, 'POST', {}, token);
-      // console.log('encrypted: ', encrypted);
+    const { data } = await getRequest(api.getData, {}, token);
+    console.log(data)
+    // console.log('encrypted: ', encrypted);
 
-      // const { text } = await request(api.private.aesDecrypt, { sessionKey, encrypted });
-      setText(text)
-      setRsaOpened(false)
-    } catch (err) {
-      handleError(err);
-    }
+    // const { text } = await request(api.private.aesDecrypt, { sessionKey, encrypted });
+    // setText(text)
+    setFiles(data)
+    setRsaOpened(false)
   };
 
   const hasRsaKeys = publicKey && privateKey;
@@ -186,8 +215,10 @@ function App() {
           onSignUp={signup}
         />
       )}
-      {sessionKey && (
-        <div> A </div>
+      {true && (
+        <Files files={files || []}>
+
+        </Files>
         // <ScrollView style={styles.textWrapper}>
         //   <Text>{text}</Text>
         // </ScrollView>
