@@ -21,14 +21,18 @@ function App() {
   const [error, setError] = useState(null)
   const [key, setKey] = useState(null)
   const [files, setFiles] = useState(null)
+  const [fileName, setFileName] = useState(null)
+  const [fileId, setFileId] = useState(null)
 
   const algorithm = 'aes-256-cfb';
 
   const encryptText = (keyStr, text) => {
     const hash = crypto.createHash('sha256');
+    console.log(hash)
     hash.update(keyStr);
+    console.log(keyStr)
     const keyBytes = hash.digest();
-  
+    console.log(keyBytes)
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv(algorithm, keyBytes, iv);
     console.log('IV:', iv);
@@ -41,7 +45,7 @@ function App() {
     const hash = crypto.createHash('sha256');
     hash.update(keyStr);
     const keyBytes = hash.digest();
-  
+
     const contents = Buffer.from(text, 'base64');
     const iv = contents.slice(0, 16);
     const textBytes = contents.slice(16);
@@ -49,7 +53,7 @@ function App() {
     let res = decipher.update(textBytes, '', 'utf8');
     res += decipher.final('utf8');
     return res;
-  } 
+  }
 
   const handleError = ({ status, error }) => {
     if (status === 401) {
@@ -185,6 +189,42 @@ function App() {
     setRsaOpened(false)
   };
 
+  const addFile = async (name, content) => {
+    // try {
+      const { data, headers } = await request(api.createFile, 'POST', {
+        filename: name,
+        text: encryptText(sessionKey, content)
+      }, token)
+      getData()
+    // } catch (err) {
+    //   handleError(err);
+    // }
+  }
+
+  const updateFile = async (name, content, fileId) => {
+    try {
+      const { data, headers } = await request(`${api.updateFile}/${fileId}`, 'PATCH', {
+        filename: name,
+        text: encryptText(sessionKey, content)
+      }, token)
+      getData()
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  const deleteFile = async (name, content, fileId) => {
+    try {
+      const { data, headers } = await request(`${api.updateFile}/${fileId}`, 'DELETE', {
+        filename: name,
+        text: encryptText(sessionKey, content)
+      }, token)
+      getData()
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
   const hasRsaKeys = publicKey && privateKey;
   const showText = !!text && !rsaOpened;
   const showLogin = hasRsaKeys && !rsaOpened && !sessionKey;
@@ -216,7 +256,12 @@ function App() {
         />
       )}
       {true && (
-        <Files files={files || []}>
+        <Files files={files || []}
+          onAdd={() => addFile(fileName, text)}
+          text={text}
+          fileName={fileName}
+          onChangeFileName={(e)=>setFileName(e.target.value)}
+          onChangeText={(e)=>setText(e.target.value)}>
 
         </Files>
         // <ScrollView style={styles.textWrapper}>
@@ -225,6 +270,7 @@ function App() {
       )}
       <button
         onClick={generateKeys}
+        style={{ marginTop: '2rem' }}
       >
         {`${hasRsaKeys ? 'Reg' : 'G'}enerate rsa keys`}
       </button>

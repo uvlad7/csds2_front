@@ -2,6 +2,7 @@ export const api = {
   login: 'login',
   signUp: 'signup',
   getData: 'files',
+  createFile: 'files',
   private: {
     rsaGenerate: 'private/rsa/generate',
     rsaDecrypt: 'private/rsa/decrypt',

@@ -10,15 +10,23 @@ gap: 1rem;
 max-width: 50%
 `
 
-export default ({ files, handleClick, text, onChangeText, fileName, onChangeFileName }) => (
+const FileItem = styled.li`
+cursor: pointer;
+`
+
+export default ({ files, handleClick, text, onChangeText, fileName, onChangeFileName, onAdd, onUpdateFile, fileId }) => (
   <GappedRow>
     <ul>
-      {console.log(files)}
       {files.map(file => {
-        return <li key={file} onClick={() => handleClick(file)}>
+        return <FileItem key={file} onClick={() => handleClick(file)}>
           {file}
-        </li>
+        </FileItem>
       })}
+      {
+        <FileItem onClick={onAdd}>
+          Add new file
+        </FileItem>
+      }
 
     </ul>
     <div>
@@ -28,11 +36,12 @@ export default ({ files, handleClick, text, onChangeText, fileName, onChangeFile
           onChange={onChangeFileName}
         />
       </div>
-      <div style={{'marginTop': '2rem'}}>
+      <div style={{ 'marginTop': '2rem' }}>
         <textarea
-        value={text}
-        onChange={onChangeText} />
-    </div>
+          value={text}
+          onChange={onChangeText} />
+      </div>
+      <button onClick={onUpdateFile} disabled={!fileId}> Update file</button>
     </div>
 
   </GappedRow >
