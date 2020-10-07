@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
-import logo from './logo.svg';
+import React, { useState, useEffect } from 'react';
 import NodeRSA from 'node-rsa'
 import './App.css';
-import DataView from './components/DataView'
 import LoginForm from './components/LoginForm'
 import Files from './components/Files'
 import crypto from 'crypto'
 
-import { request, api, str2ab, getRequest } from './utils';
+import { request, api, getRequest } from './utils';
 
 function App() {
   const [publicKey, setPublicKey] = useState()
@@ -24,36 +22,44 @@ function App() {
   const [fileName, setFileName] = useState(null)
   const [fileId, setFileId] = useState(null)
 
+  useEffect(() => {
+    if (token) {
+      getData()
+    }
+  }, [token]);
+
   const algorithm = 'aes-256-cfb';
 
   const encryptText = (keyStr, text) => {
-    const hash = crypto.createHash('sha256');
-    console.log(hash)
-    hash.update(keyStr);
-    console.log(keyStr)
-    const keyBytes = hash.digest();
-    console.log(keyBytes)
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(algorithm, keyBytes, iv);
-    console.log('IV:', iv);
-    let enc = [iv, cipher.update(text, 'utf8')];
-    enc.push(cipher.final());
-    return Buffer.concat(enc).toString('base64');
+    const iv = crypto.randomBytes(16)
+    var cipher = crypto.createCipheriv(algorithm, keyStr, iv)
+    var crypted = cipher.update(text, 'utf-8', "base64")
+    crypted += cipher.final("base64")
+    return iv.toString('hex') + ':' + crypted;
   }
 
-  const decryptText = (keyStr, text) => {
-    const hash = crypto.createHash('sha256');
-    hash.update(keyStr);
-    const keyBytes = hash.digest();
-
-    const contents = Buffer.from(text, 'base64');
-    const iv = contents.slice(0, 16);
-    const textBytes = contents.slice(16);
-    const decipher = crypto.createDecipheriv(algorithm, keyBytes, iv);
-    let res = decipher.update(textBytes, '', 'utf8');
-    res += decipher.final('utf8');
-    return res;
+  const decryptText = (keyStr, content) => {
+    const [ivString, text] = content.split(':')
+    var iv = Buffer.from(ivString, 'hex')
+    var decipher = crypto.createDecipheriv(algorithm, keyStr, iv);
+    var result = decipher.update(text, 'base64', 'utf-8');
+    result += decipher.final();
+    return result
   }
+
+  // const decryptText = (keyStr, text) => {
+  //   const hash = crypto.createHash('sha256');
+  //   hash.update(keyStr);
+  //   const keyBytes = hash.digest();
+
+  //   const contents = Buffer.from(text, 'base64');
+  //   const iv = contents.slice(0, 16);
+  //   const textBytes = contents.slice(16);
+  //   const decipher = crypto.createDecipheriv(algorithm, keyBytes, iv);
+  //   let res = decipher.update(textBytes, '', 'utf8');
+  //   res += decipher.final('utf8');
+  //   return res;
+  // }
 
   const handleError = ({ status, error }) => {
     if (status === 401) {
@@ -78,9 +84,7 @@ function App() {
       key.setOptions({ encryptionScheme: 'pkcs1' })
       setKey(key)
       const publicKey = key.exportKey('pkcs8-public-pem');
-      console.log(publicKey)
       const privateKey = key.exportKey('pkcs1-pem');
-      console.log(privateKey)
       setPublicKey(publicKey);
       setPrivateKey(privateKey);
       // console.log(publicKey)
@@ -139,7 +143,6 @@ function App() {
         },
         rsa_pub: publicKey,
       });
-      console.log(data)
       const { session_key } = data
       const token = headers.get('Authorization')
       // const { decrypted } = await request(api.private.rsaDecrypt, 'post',{
@@ -180,7 +183,6 @@ function App() {
 
   const getData = async () => {
     const { data } = await getRequest(api.getData, {}, token);
-    console.log(data)
     // console.log('encrypted: ', encrypted);
 
     // const { text } = await request(api.private.aesDecrypt, { sessionKey, encrypted });
@@ -191,42 +193,48 @@ function App() {
 
   const addFile = async (name, content) => {
     // try {
-      const { data, headers } = await request(api.createFile, 'POST', {
-        filename: name,
-        text: encryptText(sessionKey, content)
-      }, token)
-      getData()
-    // } catch (err) {
-    //   handleError(err);
-    // }
+    const { data, headers } = await request(api.createFile, 'POST', {
+      filename: name,
+      text: encryptText(sessionKey, content)
+    }, token)
+    getData()
+  }
+
+  const handleFileClick = async (fileId) => {
+    const { data } = await getRequest(api.getData + `/${fileId}`, {}, token);
+    const { id, attributes } = data
+    const { name, text } = attributes
+    setFileId(id)
+    setFileName(name)
+    setText(decryptText(sessionKey, text))
   }
 
   const updateFile = async (name, content, fileId) => {
     try {
-      const { data, headers } = await request(`${api.updateFile}/${fileId}`, 'PATCH', {
+      const { data, headers } = await request(`${api.getData}/${fileId}`, 'PUT', {
         filename: name,
         text: encryptText(sessionKey, content)
       }, token)
       getData()
     } catch (err) {
+      console.log(err)
       handleError(err);
     }
   }
 
-  const deleteFile = async (name, content, fileId) => {
+  const deleteFile = async (fileId) => {
     try {
-      const { data, headers } = await request(`${api.updateFile}/${fileId}`, 'DELETE', {
-        filename: name,
-        text: encryptText(sessionKey, content)
+      await request(`${api.getData}/${fileId}`, 'DELETE', {
       }, token)
       getData()
+      setFileId(null)
     } catch (err) {
       handleError(err);
     }
   }
 
   const hasRsaKeys = publicKey && privateKey;
-  const showText = !!text && !rsaOpened;
+  const showText = sessionKey;
   const showLogin = hasRsaKeys && !rsaOpened && !sessionKey;
   return (
 
@@ -255,14 +263,17 @@ function App() {
           onSignUp={signup}
         />
       )}
-      {true && (
+      {showText && (
         <Files files={files || []}
           onAdd={() => addFile(fileName, text)}
           text={text}
+          handleClick={handleFileClick}
+          handleDelete={deleteFile}
           fileName={fileName}
-          onChangeFileName={(e)=>setFileName(e.target.value)}
-          onChangeText={(e)=>setText(e.target.value)}>
-
+          fileId={fileId}
+          onChangeFileName={(e) => setFileName(e.target.value)}
+          onChangeText={(e) => setText(e.target.value)}
+          onUpdateFile={(e) => updateFile(fileName, text, fileId)}>
         </Files>
         // <ScrollView style={styles.textWrapper}>
         //   <Text>{text}</Text>
