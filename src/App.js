@@ -173,7 +173,7 @@ function App() {
       const token = headers.get('Authorization')
 
       setToken(token)
-      setSessionKey(decrypt(session_key))
+      decrypt(session_key)
       setError(null)
       setPassword('')
     } catch (err) {
