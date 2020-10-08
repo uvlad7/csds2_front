@@ -11,7 +11,7 @@ export const api = {
   },
 };
 
-const host = 'http://localhost:4000'
+const host = 'https://csds2.herokuapp.com/'
 
 export const request = async (url, method, data, token = null) => {
   const response = await fetch(`${host}/${url}`, {

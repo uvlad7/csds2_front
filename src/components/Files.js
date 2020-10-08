@@ -35,12 +35,12 @@ export default ({ files, handleClick, text, onChangeText, fileName, onChangeFile
       })}
       {
         <FileItem onClick={onAdd}>
-          <button>Add new file</button>
+          <button disabled={!text}>Add new file</button>
         </FileItem>
       }
 
     </ul>
-    <div>
+    <div style={{'border': '2px solid black', 'padding': '2rem'}}>
       <div>
         <input
           value={fileName}
